@@ -1709,12 +1709,14 @@ function loadLocalTrades() {
                 return;
             }
             
-            // Calculate performance metrics
+            // Calculate performance metrics - EXCLUDE ZERO P&L TRADES FROM WIN RATE
             const wins = simulationTrades.filter(trade => trade.pnl > 0);
             const losses = simulationTrades.filter(trade => trade.pnl < 0);
-            
+            const zeroTrades = simulationTrades.filter(trade => trade.pnl === 0);
+
             const totalNetR = simulationTrades.reduce((sum, trade) => sum + trade.pnl, 0);
-            const winRate = (wins.length / simulationTrades.length) * 100;
+            const tradesForWinRate = wins.length + losses.length; // Only count wins + losses
+            const winRate = tradesForWinRate > 0 ? (wins.length / tradesForWinRate) * 100 : 0;
             const avgWin = wins.length > 0 ? wins.reduce((sum, trade) => sum + trade.pnl, 0) / wins.length : 0;
             const avgLoss = losses.length > 0 ? losses.reduce((sum, trade) => sum + trade.pnl, 0) / losses.length : 0;
             const profitFactor = Math.abs(avgWin * wins.length) / Math.abs(avgLoss * losses.length) || 0;
@@ -2164,3 +2166,4 @@ function loadLocalTrades() {
     </script>
 </body>
 </html>
+
