@@ -1830,45 +1830,50 @@ function loadLocalTrades() {
             }
         }
         
-        // Apply max consecutive losses filter
-        function applyMaxLossesFilter(trades, maxLosses) {
-            const tradesByDate = {};
-            trades.forEach(trade => {
-                if (!tradesByDate[trade.date]) {
-                    tradesByDate[trade.date] = [];
-                }
-                tradesByDate[trade.date].push(trade);
-            });
-            
-            const filteredTrades = [];
-            
-            Object.keys(tradesByDate).sort().forEach(date => {
-                const dayTrades = tradesByDate[date].sort((a, b) => a.timestamp - b.timestamp);
-                let currentLossStreak = 0;
-                let stopped = false;
-                
-                for (const trade of dayTrades) {
-                    if (stopped) {
-                        continue;
-                    }
-                    
-                    if (trade.pnl < 0) {
-                        currentLossStreak++;
-                    } else {
-                        currentLossStreak = 0;
-                    }
-                    
-                    if (currentLossStreak > maxLosses) {
-                        filteredTrades.push(trade);
-                        stopped = true;
-                    } else {
-                        filteredTrades.push(trade);
-                    }
-                }
-            });
-            
-            return filteredTrades;
+// Apply max consecutive losses filter - IGNORE BE TRADES (0 P&L) FROM LOSS STREAK
+function applyMaxLossesFilter(trades, maxLosses) {
+    const tradesByDate = {};
+    trades.forEach(trade => {
+        if (!tradesByDate[trade.date]) {
+            tradesByDate[trade.date] = [];
         }
+        tradesByDate[trade.date].push(trade);
+    });
+    
+    const filteredTrades = [];
+    
+    Object.keys(tradesByDate).sort().forEach(date => {
+        const dayTrades = tradesByDate[date].sort((a, b) => a.timestamp - b.timestamp);
+        let currentLossStreak = 0;
+        let stopped = false;
+        
+        for (const trade of dayTrades) {
+            if (stopped) {
+                // STOP TRADING for the day - don't include any more trades
+                continue;
+            }
+            
+            // Process the trade
+            if (trade.pnl < 0) {
+                currentLossStreak++;
+            } else if (trade.pnl > 0) {
+                // Reset streak on WINNING trades
+                currentLossStreak = 0;
+            }
+            // BE TRADES (pnl = 0) don't affect the streak
+            
+            // Include this trade
+            filteredTrades.push(trade);
+            
+            // Check if we should stop AFTER this trade
+            if (trade.pnl < 0 && currentLossStreak >= maxLosses) {
+                stopped = true;
+            }
+        }
+    });
+    
+    return filteredTrades;
+}
         
         // Update equity curve chart
         function updateEquityChart(filteredTrades) {
@@ -2166,4 +2171,5 @@ function loadLocalTrades() {
     </script>
 </body>
 </html>
+
 
