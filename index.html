@@ -1510,28 +1510,30 @@ function loadLocalTrades() {
             sortedTrades.forEach(trade => {
                 const row = document.createElement('tr');
                 
-                // Calculate simulated P&L based on current TP slider
-                let simulatedPnl;
-                let displayText;
-                
-                if (currentRrSimulation > 0) {
-                    // Simulation mode
-                    if (trade.maxRrHit >= currentRrSimulation) {
-                        simulatedPnl = currentRrSimulation;
-                        displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: +${currentRrSimulation.toFixed(1)}R`;
-                    } else {
-                        if (trade.pnl < 0) {
-                            simulatedPnl = trade.pnl;
-                            displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: ${trade.pnl.toFixed(2)}R`;
-                        } else {
-                            simulatedPnl = 0;
-                            displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: +0.0R`;
-                        }
-                    }
-                } else {
-                    simulatedPnl = trade.pnl;
-                    displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Actual: ${trade.pnl > 0 ? '+' : ''}${trade.pnl.toFixed(2)}R`;
-                }
+// Calculate simulated P&L based on current TP slider
+let simulatedPnl;
+let displayText;
+
+if (currentRrSimulation > 0) {
+    // Simulation mode
+    if (trade.maxRrHit >= currentRrSimulation) {
+        simulatedPnl = currentRrSimulation;
+        displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: +${currentRrSimulation.toFixed(1)}R`;
+    } else {
+        // If trade didn't hit target TP, use ACTUAL P&L (not 0)
+        simulatedPnl = trade.pnl;
+        if (trade.pnl > 0) {
+            displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: +${trade.pnl.toFixed(2)}R`;
+        } else if (trade.pnl < 0) {
+            displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: ${trade.pnl.toFixed(2)}R`;
+        } else {
+            displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: +0.0R`;
+        }
+    }
+} else {
+    simulatedPnl = trade.pnl;
+    displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Actual: ${trade.pnl > 0 ? '+' : ''}${trade.pnl.toFixed(2)}R`;
+}
                 
                 row.className = simulatedPnl >= 0 ? 'win' : 'loss';
                 
@@ -1658,27 +1660,22 @@ function loadLocalTrades() {
             // Calculate optimal TP level
             calculateOptimalTp(filteredTrades);
             
-            // Apply RR simulation
-            let simulationTrades = [...filteredTrades];
-            if (currentRrSimulation > 0) {
-                simulationTrades = filteredTrades.map(trade => {
-                    if (trade.maxRrHit >= currentRrSimulation) {
-                        return {
-                            ...trade,
-                            pnl: currentRrSimulation
-                        };
-                    } else {
-                        if (trade.pnl < 0) {
-                            return trade;
-                        } else {
-                            return {
-                                ...trade,
-                                pnl: 0
-                            };
-                        }
-                    }
-                });
-            }
+// Apply RR simulation - FIXED VERSION
+let simulationTrades = [...filteredTrades];
+if (currentRrSimulation > 0) {
+    simulationTrades = filteredTrades.map(trade => {
+        if (trade.maxRrHit >= currentRrSimulation) {
+            // If trade hit the target TP, simulate taking profit at that level
+            return {
+                ...trade,
+                pnl: currentRrSimulation
+            };
+        } else {
+            // If trade didn't hit target TP, use the ACTUAL P&L (not 0)
+            return trade; // This keeps the original pnl value (1.5 in your example)
+        }
+    });
+}
             
             // Continue with rest of dashboard update
             simulationTrades.sort((a, b) => {
@@ -2171,5 +2168,3 @@ function applyMaxLossesFilter(trades, maxLosses) {
     </script>
 </body>
 </html>
-
-
