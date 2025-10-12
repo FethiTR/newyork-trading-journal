@@ -1510,7 +1510,7 @@ function loadLocalTrades() {
             sortedTrades.forEach(trade => {
                 const row = document.createElement('tr');
                 
-// Calculate simulated P&L based on current TP slider
+// Calculate simulated P&L based on current TP slider - CORRECT LOGIC
 let simulatedPnl;
 let displayText;
 
@@ -1519,16 +1519,12 @@ if (currentRrSimulation > 0) {
     if (trade.maxRrHit >= currentRrSimulation) {
         simulatedPnl = currentRrSimulation;
         displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: +${currentRrSimulation.toFixed(1)}R`;
-    } else {
-        // If trade didn't hit target TP, use ACTUAL P&L (not 0)
+    } else if (trade.pnl < 0) {
         simulatedPnl = trade.pnl;
-        if (trade.pnl > 0) {
-            displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: +${trade.pnl.toFixed(2)}R`;
-        } else if (trade.pnl < 0) {
-            displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: ${trade.pnl.toFixed(2)}R`;
-        } else {
-            displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: +0.0R`;
-        }
+        displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: ${trade.pnl.toFixed(2)}R`;
+    } else {
+        simulatedPnl = 0;
+        displayText = `Max: ${trade.maxRrHit.toFixed(1)}R | Simulated: +0.0R`;
     }
 } else {
     simulatedPnl = trade.pnl;
@@ -1660,19 +1656,25 @@ if (currentRrSimulation > 0) {
             // Calculate optimal TP level
             calculateOptimalTp(filteredTrades);
             
-// Apply RR simulation - FIXED VERSION
+// Apply RR simulation - CORRECT LOGIC
 let simulationTrades = [...filteredTrades];
 if (currentRrSimulation > 0) {
     simulationTrades = filteredTrades.map(trade => {
         if (trade.maxRrHit >= currentRrSimulation) {
-            // If trade hit the target TP, simulate taking profit at that level
+            // Hit TP → take profit at TP level
             return {
                 ...trade,
                 pnl: currentRrSimulation
             };
+        } else if (trade.pnl < 0) {
+            // Didn't hit TP but was negative → take loss
+            return trade; // Keep actual negative P&L
         } else {
-            // If trade didn't hit target TP, use the ACTUAL P&L (not 0)
-            return trade; // This keeps the original pnl value (1.5 in your example)
+            // Didn't hit TP but was positive/zero → skip trade (0R)
+            return {
+                ...trade,
+                pnl: 0
+            };
         }
     });
 }
@@ -1779,53 +1781,54 @@ if (currentRrSimulation > 0) {
             updateEquityChart(simulationTrades);
         }
 
-        // Calculate optimal TP level
-        function calculateOptimalTp(filteredTrades) {
-            if (filteredTrades.length === 0) {
-                optimalTpValue.textContent = '-';
-                optimalTpDisplay.textContent = '';
-                return;
+// Calculate optimal TP level - CORRECT LOGIC
+function calculateOptimalTp(filteredTrades) {
+    if (filteredTrades.length === 0) {
+        optimalTpValue.textContent = '-';
+        optimalTpDisplay.textContent = '';
+        return;
+    }
+    
+    let bestTp = 0.5;
+    let bestNetR = -Infinity;
+    
+    for (let tp = 0.5; tp <= 10; tp += 0.1) {
+        tp = Math.round(tp * 10) / 10;
+        
+        let netR = 0;
+        
+        filteredTrades.forEach(trade => {
+            const roundedMax = Math.round(trade.maxRrHit * 10) / 10;
+            
+            if (roundedMax >= tp) {
+                // Hit TP → take profit at TP level
+                netR += tp;
+            } else if (trade.pnl < 0) {
+                // Didn't hit TP but was negative → take loss
+                netR += trade.pnl;
             }
-            
-            let bestTp = 0.5;
-            let bestNetR = -Infinity;
-            
-            for (let tp = 0.5; tp <= 10; tp += 0.1) {
-                tp = Math.round(tp * 10) / 10;
-                
-                let netR = 0;
-                
-                filteredTrades.forEach(trade => {
-                    const roundedMax = Math.round(trade.maxRrHit * 10) / 10;
-                    
-                    if (roundedMax >= tp) {
-                        netR += tp;
-                    } else {
-                        if (trade.pnl < 0) {
-                            netR += trade.pnl;
-                        }
-                    }
-                });
-                
-                if (netR > bestNetR || (Math.abs(netR - bestNetR) < 0.001 && tp > bestTp)) {
-                    bestNetR = netR;
-                    bestTp = tp;
-                }
-            }
-            
-            optimalTpValue.textContent = `${bestTp.toFixed(1)} RR`;
-            optimalTpDisplay.textContent = `Would yield: ${bestNetR.toFixed(2)}R total`;
-            
-            const actualNetR = filteredTrades.reduce((sum, trade) => sum + trade.pnl, 0);
-            
-            if (bestNetR > actualNetR) {
-                optimalTpCard.className = 'stat-card positive';
-            } else if (bestNetR < actualNetR) {
-                optimalTpCard.className = 'stat-card negative';
-            } else {
-                optimalTpCard.className = 'stat-card';
-            }
+            // Didn't hit TP but was positive/zero → skip trade (0R - no change to netR)
+        });
+        
+        if (netR > bestNetR || (Math.abs(netR - bestNetR) < 0.001 && tp > bestTp)) {
+            bestNetR = netR;
+            bestTp = tp;
         }
+    }
+    
+    optimalTpValue.textContent = `${bestTp.toFixed(1)} RR`;
+    optimalTpDisplay.textContent = `Would yield: ${bestNetR.toFixed(2)}R total`;
+    
+    const actualNetR = filteredTrades.reduce((sum, trade) => sum + trade.pnl, 0);
+    
+    if (bestNetR > actualNetR) {
+        optimalTpCard.className = 'stat-card positive';
+    } else if (bestNetR < actualNetR) {
+        optimalTpCard.className = 'stat-card negative';
+    } else {
+        optimalTpCard.className = 'stat-card';
+    }
+}
         
 // Apply max consecutive losses filter - IGNORE BE TRADES (0 P&L) FROM LOSS STREAK
 function applyMaxLossesFilter(trades, maxLosses) {
